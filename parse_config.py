@@ -49,7 +49,7 @@ class PipelineConfigParser:
         else:
             module = self.imported_modules[module_name]
         return module
-        
+
     def make_connector(self, name: str, data: Dict):
         workers = []
         if data['protocol'] == 'http':
@@ -81,7 +81,7 @@ class PipelineConfigParser:
                 raise ValueError(f"Expected class description in a `module.submodules:ClassName` form, but got `{data['class_name']}`")
             others = {k: v for k, v in data.items() if k not in {'protocol', 'class_name'}}
             connector = connector_class(**others)
-        
+
         self.workers.extend(workers)
         self.connectors[name] = connector
 
@@ -99,7 +99,7 @@ class PipelineConfigParser:
             connector = self.connectors.get(service_name, None)
         if not connector:
             raise ValueError(f'connector in pipeline.{service_name} is not declared')
-        
+
         sm_data = data.get('state_manager_method', None)
         if sm_data:
             sm_method = getattr(self.state_manager, sm_data, None)
@@ -107,7 +107,7 @@ class PipelineConfigParser:
                 raise ValueError(f"state manager doesn't have a method {sm_data} (declared in {service_name})")
         else:
             sm_method = None
-        
+
         dialog_formatter = None
         response_formatter = None
 
@@ -126,10 +126,15 @@ class PipelineConfigParser:
         names_previous_services = set()
         for sn in data.get('previous_services', set()):
             names_previous_services.update(self.services_names.get(sn, set()))
+        names_required_previous_services = set()
+        for sn in data.get('required_previous_services', set()):
+            names_required_previous_services.update(self.services_names.get(sn, set()))
         tags = data.get('tags', [])
         self.services.append(
             Service(name=service_name, connector_func=connector.send, state_processor_method=sm_method, tags=tags,
-                    names_previous_services=names_previous_services, workflow_formatter=workflow_formatter,
+                    names_previous_services=names_previous_services,
+                    names_required_previous_services=names_required_previous_services,
+                    workflow_formatter=workflow_formatter,
                     dialog_formatter=dialog_formatter, response_formatter=response_formatter, label=name)
         )
 
@@ -149,7 +154,7 @@ class PipelineConfigParser:
                 elif not isinstance(v['connector'], str):
                     raise ValueError({f'connector in pipeline.{k} is declared incorrectly'})
                 self.services_names[k].add(k)
-            else: # grouped services
+            else:  # grouped services
                 for sk, sv in v.items():
                     service_name = f'{k}.{sk}'
                     if isinstance(sv['connector'], dict):
@@ -160,6 +165,7 @@ class PipelineConfigParser:
                     elif not isinstance(sv['connector'], str):
                         raise ValueError({f'connector in pipeline.{service_name} is declared incorrectly'})
                     self.services_names[k].add(service_name)
+                    self.services_names[service_name].add(service_name)
 
     def fill_services(self):
         for k, v in self.config['services'].items():
